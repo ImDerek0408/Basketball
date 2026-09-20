@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>像素籃球對決</title>
+  <style>
+    :root { --ink:#18243d; --blue:#4bb4e6; --red:#f15e5e; --paper:#ffe9b9; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body { margin:0; min-height:100vh; overflow:hidden; background:#18243d; color:white; font-family:system-ui, sans-serif; touch-action:none; }
+    #game { display:block; width:100vw; height:100vh; image-rendering:pixelated; image-rendering:crisp-edges; }
+    #controls { position:fixed; inset:auto 0 max(14px, env(safe-area-inset-bottom)); display:flex; justify-content:space-between; padding:0 18px; pointer-events:none; }
+    .side { display:grid; grid-template-columns:repeat(3, 62px); gap:9px; pointer-events:auto; }
+    .right { direction:rtl; }
+    button { border:4px solid #fff5d8; border-radius:13px; width:62px; height:58px; color:#fff; font-size:23px; font-weight:900; text-shadow:2px 2px #18243d; box-shadow:0 5px 0 #18243d; touch-action:none; }
+    .blue button { background:#278fca; } .red button { background:#d7444a; }
+    button:active, button.active { transform:translateY(4px); box-shadow:0 1px 0 #18243d; filter:brightness(.88); }
+    .shoot { grid-column:span 3; width:100%; font-size:17px; letter-spacing:1px; }
+    #restart { position:fixed; top:14px; left:50%; transform:translateX(-50%); display:none; background:#f5a936; width:auto; padding:0 18px; font-size:16px; }
+    @media (min-width:700px) { .side { grid-template-columns:repeat(3, 78px); gap:12px; } button { width:78px; height:68px; } }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <button id="restart">再玩一次</button>
+  <div id="controls">
+    <div class="side blue" data-player="0">
+      <button data-key="left">◀</button><button data-key="jump">▲</button><button data-key="right">▶</button>
+      <button class="shoot" data-key="fake">拜 佛</button>
+      <button class="shoot" data-key="steal">抄 球</button>
+    </div>
+    <div class="side red right" data-player="1">
+      <button data-key="left">◀</button><button data-key="jump">▲</button><button data-key="right">▶</button>
+      <button class="shoot" data-key="fake">拜 佛</button>
+      <button class="shoot" data-key="steal">抄 球</button>
+    </div>
+  </div>
+  <script>
+  (() => {
+    const c = document.querySelector('#game'), x = c.getContext('2d');
+    const restart = document.querySelector('#restart');
+    const W=480,H=270, ground=224, keys=[{},{}];
+    // Change these file paths when you want to use your own artwork.
+    const art={};
+    Object.entries({background:'assets/background.svg',blue:'assets/player-blue.svg',red:'assets/player-red.svg',ball:'assets/ball-new.png',hoopLeft:'assets/hoop-left.svg',hoopRight:'assets/hoop-right.svg',still:'assets/player-still.png',shootPose:'assets/shoot-pose-new.png'}).forEach(([name,src])=>{const img=new Image();img.src=src;art[name]=img});
+    const ready=img=>img && img.complete && img.naturalWidth>0;
+    // Remove only light background connected to an image edge, preserving white uniform details.
+    function cleanFrame(source){
+      const raw=document.createElement('canvas'),ctx=raw.getContext('2d');raw.width=source.width;raw.height=source.height;ctx.drawImage(source,0,0);
+      const data=ctx.getImageData(0,0,raw.width,raw.height),px=data.data,w=raw.width,h=raw.height,seen=new Uint8Array(w*h),stack=[];
+      const backdrop=(i)=>px[i+3]>0&&((px[i]>225&&px[i+1]>225&&px[i+2]>225)||(Math.max(px[i],px[i+1],px[i+2])-Math.min(px[i],px[i+1],px[i+2])<18&&(px[i]+px[i+1]+px[i+2])/3>185));
+      const add=(x,y)=>{if(x<0||y<0||x>=w||y>=h)return;const id=y*w+x;if(!seen[id]&&backdrop(id*4)){seen[id]=1;stack.push(id)}};
+      for(let x=0;x<w;x++){add(x,0);add(x,h-1)}for(let y=0;y<h;y++){add(0,y);add(w-1,y)}
+      while(stack.length){const id=stack.pop(),x=id%w,y=(id/w)|0;px[id*4+3]=0;add(x+1,y);add(x-1,y);add(x,y+1);add(x,y-1)}
+      // Remove detached specks such as generation counters/marks above the character.
+      const visited=new Uint8Array(w*h),groups=[];
+      for(let seed=0;seed<w*h;seed++){
+        if(visited[seed]||px[seed*4+3]<20)continue;
+        const group=[],queue=[seed];visited[seed]=1;
+        while(queue.length){const id=queue.pop();group.push(id);const gx=id%w,gy=(id/w)|0;
+          for(const [nx,ny] of [[gx+1,gy],[gx-1,gy],[gx,gy+1],[gx,gy-1]]){const ni=ny*w+nx;if(nx>=0&&ny>=0&&nx<w&&ny<h&&!visited[ni]&&px[ni*4+3]>=20){visited[ni]=1;queue.push(ni)}}
+        }groups.push(group);
+      }
+      const largest=Math.max(0,...groups.map(g=>g.length));
+      for(const group of groups)if(group.length<Math.max(28,largest*.018))for(const id of group)px[id*4+3]=0;
+      ctx.putImageData(data,0,0);
+      let left=w,top=h,right=0,bottom=0;for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(px[(y*w+x)*4+3]>12){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y)}
+      if(right<=left||bottom<=top)return raw;const pad=2,out=document.createElement('canvas');out.width=right-left+1+pad*2;out.height=bottom-top+1+pad*2;out.getContext('2d').drawImage(raw,left-pad,top-pad,out.width,out.height,0,0,out.width,out.height);return out;
+    }
+    const frames={shoot:[],run:[],steal:[],dunk:[],fake:[],dribble:[],fakeBall:[]};
+    const addFrames=(action,paths)=>paths.forEach((src,index)=>{
+      const source=new Image();source.src=src;source.onload=()=>{
+        frames[action][index]=cleanFrame(source);
+      };
+    });
+    addFrames('shoot',Array.from({length:7},(_,n)=>`assets/player-frames/shoot-new/shoot_frame_${n+1}.png`));
+    addFrames('run',Array.from({length:7},(_,n)=>`assets/player-frames/run/running_frame_${n+1}.png`));
+    addFrames('steal',Array.from({length:7},(_,n)=>`assets/player-frames/steal/steal_frame_${n+1}.png`));
+    addFrames('dunk',Array.from({length:10},(_,n)=>`assets/player-frames/dunk/dunk_frame_${String(n+1).padStart(2,'0')}.png`));
+    addFrames('fake',Array.from({length:3},(_,n)=>`assets/player-frames/fake/bai佛_frame_${n+1}.png`));
+    addFrames('dribble',Array.from({length:9},(_,n)=>`assets/player-frames/dribble-ball/dribble_frame_${String(n+2).padStart(2,'0')}.png`));
+    addFrames('fakeBall',Array.from({length:3},(_,n)=>`assets/player-frames/fake-ball/bai佛_ball_frame_${n+1}.png`));
+    art.still.onload=()=>{art.still=cleanFrame(art.still)};
+    art.shootPose.onload=()=>{art.shootPose=cleanFrame(art.shootPose)};
+    // Only blue uniform pixels are recoloured; skin, hair and white details retain their natural colours.
+    const redFrames=new WeakMap();
+    function teamFrame(frame,team){
+      if(team===0)return frame;if(redFrames.has(frame))return redFrames.get(frame);
+      const out=document.createElement('canvas'),ctx=out.getContext('2d');out.width=frame.width;out.height=frame.height;ctx.drawImage(frame,0,0);
+      const data=ctx.getImageData(0,0,out.width,out.height),px=data.data;
+      for(let n=0;n<px.length;n+=4)if(px[n+3]&&px[n+2]>px[n]*1.16&&px[n+2]>px[n+1]*1.06){
+        const light=Math.max(px[n],px[n+1],px[n+2]);px[n]=light;px[n+1]=Math.round(px[n+1]*.34);px[n+2]=Math.round(px[n]*.45);
+      }
+      ctx.putImageData(data,0,0);redFrames.set(frame,out);return out;
+    }
+    function drawPlayerFrame(p,i,px,py){
+      const shooting=(ball.held===i&&p.y<ground-29)||p.aim>0||p.shootAnim>0;
+      const held=ball.held===i;
+      const action=p.dunk>0?'dunk':p.steal>0?'steal':p.fake>0&&held?'fakeBall':shooting?'shoot':held?'dribble':Math.abs(p.vx)>20?'run':'still';
+      const set=action==='still'?[art.still]:action==='shoot'?[art.shootPose]:frames[action].filter(Boolean);if(!set.length||!set[0])return false;
+      const rate=action==='shoot'?82:action==='fakeBall'?105:action==='dribble'?88:75;
+      let frame=set[Math.floor(performance.now()/rate)%set.length];
+      // Only use the continuous same-hand dribble poses, then play them back in reverse.
+      if(action==='dribble'){const safe=[0,1,2,3,4,5,6,7,8,7,6,5,4,3,2,1],tick=Math.floor(performance.now()/rate)%safe.length;frame=set[safe[tick]]}
+      if(action==='dunk')frame=set[Math.min(set.length-1,Math.floor((1-p.dunk/.48)*set.length))];
+      if(action==='fake'||action==='fakeBall')frame=set[Math.min(set.length-1,Math.floor((.32-p.fake)/.32*set.length))];
+      if(action==='shoot')frame=set[0];
+      // One fixed character box and foot baseline prevents frame-to-frame body-size changes.
+      const height=action==='dunk'?96:78, width=action==='dunk'?58:action==='still'?36:action==='shoot'?40:52, teamArt=teamFrame(frame,i);
+      x.save();x.translate(px+10,py+26);if(p.face<0)x.scale(-1,1);x.drawImage(teamArt,-width/2,-height,width,height);x.restore();
+      return true;
+    }
+    const ballGravity=700, ballRadius=10;
+    let scale=1, gameOver=false, last=0, clock=60, scores=[0,0], players, ball, transition=null;
+    function reset(){
+      gameOver=false; clock=60; scores=[0,0]; transition=null; restart.style.display='none';
+      players=[{x:100,y:ground-28,vx:0,vy:0,face:1,col:'#278fca',num:'1',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribble:0},{x:352,y:ground-28,vx:0,vy:0,face:-1,col:'#d7444a',num:'2',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribble:0}];
+      ball={x:240,y:95,vx:0,vy:0,held:-1,wait:0,rimHit:false,canScore:false,spin:0,angular:0,rimRoll:null,rimCooldown:0};
+    }
+    function resize(){ c.width=innerWidth; c.height=innerHeight; scale=Math.min(c.width/W,c.height/H); }
+    addEventListener('resize',resize); resize(); reset();
+    document.querySelectorAll('[data-key]').forEach(b=>{
+      const p=+b.parentElement.dataset.player, k=b.dataset.key;
+      const down=e=>{e.preventDefault(); keys[p][k]=true;b.classList.add('active')};
+      const up=e=>{e.preventDefault(); keys[p][k]=false;b.classList.remove('active')};
+      b.addEventListener('pointerdown',down); ['pointerup','pointercancel','pointerleave'].forEach(e=>b.addEventListener(e,up));
+    });
+    restart.onclick=reset;
+    function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+    function startScore(scorer){
+      scores[scorer]++;
+      transition={time:0,scorer};
+      ball={x:240,y:58,vx:0,vy:0,held:-1,wait:.8,rimHit:false,canScore:false,spin:0,angular:0,rimRoll:null,rimCooldown:0};
+    }
+    function shoot(p,i){
+      if(ball.held!==i||p.aim<=0) return;
+      const hoopX=i===0?442:38, targetY=98, distance=Math.abs(p.aim-.625);
+      const quality=p.aim>=.5&&p.aim<=.75 ? .9+.1*(1-distance/.125) : Math.max(0,.8-distance*1.6);
+      const makeChance=.12+.78*quality, canScore=Math.random()<makeChance;
+      const targetX=hoopX+(canScore?0:(Math.random()<.5?-14:14)), dx=targetX-ball.x;
+      const flight=.72+p.aim*.9;
+      ball.held=-1;ball.wait=.22;ball.vx=dx/flight;ball.vy=(targetY-ball.y-(ballGravity*.5)*flight*flight)/flight;
+      ball.hidden=false;ball.canScore=canScore;ball.rimHit=false;ball.angular=ball.vx*.055;ball.rimCooldown=0;
+      p.cool=.35;p.shootAnim=.58;p.aim=0;p.aimDir=1;
+    }
+    function update(dt){
+      if(gameOver) return;
+      if(transition){
+        transition.time+=dt;
+        if(transition.time>=1){
+          const receiver=1-transition.scorer,p=players[receiver];
+          ball={x:p.x+15*p.face,y:p.y+9,vx:0,vy:0,held:receiver,wait:.25,rimHit:false,canScore:false,spin:0,angular:0,rimRoll:null,rimCooldown:0};
+          transition=null;
+        }
+        return;
+      }
+      clock-=dt; if(clock<=0){clock=0;gameOver=true;restart.style.display='block';return}
+      players.forEach((p,i)=>{
+        // At close range, a held-ball jump turns into a guided dunk.
+        if(p.dunk>0){
+          p.dunk-=dt;
+          const t=Math.min(1,1-p.dunk/.48), ease=1-(1-t)*(1-t);
+          p.x=p.dunkStart+(p.dunkTarget-p.dunkStart)*ease;
+          p.y=ground-28-Math.sin(t*Math.PI)*96; p.vx=p.vy=0;
+          if(t>=.54&&!p.dunkScored){p.dunkScored=true;p.dunk=0;p.y=ground-28;startScore(i)}
+          if(p.dunk<=0){p.y=ground-28;p.dunk=0}
+          return;
+        }
+        let k=keys[i], dir=(k.left?-1:0)+(k.right?1:0); p.vx+=(dir*128-p.vx)*Math.min(1,dt*(dir?15:9)); if(dir)p.face=dir;
+        const hoopX=i===0?442:38, nearHoop=Math.abs(p.x+10-hoopX)<62;
+        if(k.jump&&p.y>=ground-28&&!p.jumpLock&&ball.held===i&&nearHoop){
+          p.dunk=.48;p.dunkStart=p.x;p.dunkTarget=i===0?410:50;p.dunkScored=false;p.jumpLock=true;p.aim=0;
+          return;
+        }
+        if(k.jump&&p.y>=ground-28&&!p.jumpLock){p.vy=-360;p.jumpLock=true}
+        if(!k.jump)p.jumpLock=false;
+        const wasAir=p.y<ground-29;
+        p.vy+=620*dt;p.x=clamp(p.x+p.vx*dt,18,W-36);p.y+=p.vy*dt;
+        const landed=wasAir&&p.y>ground-28;
+        if(p.y>ground-28){p.y=ground-28;p.vy=0} p.cool-=dt;p.shootAnim=Math.max(0,p.shootAnim-dt);p.fake=Math.max(0,p.fake-dt);p.steal=Math.max(0,p.steal-dt);p.stealCool-=dt;p.stealGood=Math.max(0,p.stealGood-dt);p.run=(p.run||0)+Math.abs(p.vx)*dt*.12;p.dribble=(p.dribble||0)+dt*(Math.abs(p.vx)>20?12:8);
+        const d=Math.hypot(p.x+9-ball.x,p.y+12-ball.y);
+        if(ball.held<0&&d<25&&ball.wait<=0) ball.held=i;
+        // Holding jump in the air is the shot: release jump to throw.
+        if(k.jump && p.y<ground-28 && ball.held===i && p.cool<=0){
+          p.aim+=p.aimDir*dt*1.35;
+          if(p.aim>=1){p.aim=1;p.aimDir=-1}
+          if(p.aim<=0){p.aim=0;p.aimDir=1}
+        }
+        if(!k.jump&&p.aim>0&&ball.held===i) shoot(p,i);
+        // Keeping jump held all the way down releases the ball on landing.
+        if(landed&&p.aim>0&&ball.held===i) shoot(p,i);
+        if(ball.held!==i && !k.jump){p.aim=0;p.aimDir=1}
+        // Pump fake: keep the ball, sell a quick shot, then burst forward.
+        if(k.fake && ball.held===i && p.cool<=0){p.fake=.32;p.vx+=p.face*78;p.cool=.26;k.fake=false}
+        // A quick reach can take the ball only when close to the ball-handler.
+        if(k.steal && p.stealCool<=0){
+          p.steal=.22;p.stealCool=.48;k.steal=false;
+          const other=players[1-i];
+          if(ball.held===1-i && Math.hypot(p.x-other.x,p.y-other.y)<44 && other.dunk<=0 && Math.random()<.64){
+            ball.held=i;ball.wait=.14;p.stealGood=.32;
+          }
+        }
+      });
+      if(ball.held>=0){
+        const p=players[ball.held];
+        // Dribble and fake frames already include the ball; hide the physics ball to prevent doubles.
+        // Dribble, fake and the selected shot pose each already contain a ball.
+        const spriteOwnsBall=p.dunk<=0;
+        ball.hidden=spriteOwnsBall;
+        let handX=p.x+17*p.face,handY=p.y+7;
+        if(p.dunk>0){handX=p.x+24*p.face;handY=p.y-22}
+        // Matches the raised double-hand position in the selected shooting pose.
+        else if(p.aim>0||p.shootAnim>0||p.y<ground-29){handX=p.x+24*p.face;handY=p.y-48}
+        else if(p.fake>0){handX=p.x+19*p.face;handY=p.y+10}
+        ball.x=handX;ball.y=handY;ball.vx=ball.vy=0;
+      } else if(ball.rimRoll){
+        const r=ball.rimRoll;r.time+=dt;ball.spin+=18*dt;ball.x=r.x+Math.cos(r.time*18)*8;ball.y=100+Math.sin(r.time*18)*2;
+        if(r.time>.34)startScore(r.score);
+      } else {
+        ball.wait-=dt;ball.rimCooldown=Math.max(0,(ball.rimCooldown||0)-dt);
+        ball.vy+=ballGravity*dt;ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.spin+=ball.angular*dt;ball.angular*=.997;
+        if(ball.x<ballRadius||ball.x>W-ballRadius){ball.x=clamp(ball.x,ballRadius,W-ballRadius);ball.vx*=-.68;ball.angular*=-.65}
+        if(ball.y>ground-ballRadius){ball.y=ground-ballRadius;ball.vy*=-.62;ball.vx*=.88;ball.angular*=.62;if(Math.abs(ball.vy)<24)ball.vy=0}
+        const hoops=[{x:38,score:1},{x:442,score:0}];
+        hoops.forEach(h=>{
+          // A made ball may briefly roll around the rim before dropping through.
+          if(ball.canScore&&ball.vy>0&&ball.y>91&&ball.y<110&&Math.abs(ball.x-h.x)<10){
+            if(Math.random()<.3){ball.rimRoll={x:h.x,score:h.score,time:0};ball.vx=ball.vy=0}
+            else startScore(h.score);
+            return;
+          }
+          if(ball.rimCooldown>0)return;
+          for(const rimX of [h.x-17,h.x+17]){
+            const dx=ball.x-rimX,dy=ball.y-102,dist=Math.hypot(dx,dy);
+            if(dist<ballRadius+4){
+              const nx=dx/(dist||1),ny=dy/(dist||1),toward=ball.vx*nx+ball.vy*ny;
+              if(toward<0){
+                const bounce=.57;ball.vx=(ball.vx-(1+bounce)*toward*nx)*.94;ball.vy=(ball.vy-(1+bounce)*toward*ny)*.94;
+                ball.x=rimX+nx*(ballRadius+4);ball.y=102+ny*(ballRadius+4);ball.angular+=(ball.vx*ny-ball.vy*nx)*.018;ball.rimCooldown=.055;
+              }
+            }
+          }
+        });
+      }
+    }
+    function rect(a,b,d,e,col){x.fillStyle=col;x.fillRect(a,b,d,e)}
+    function draw(){
+      x.setTransform(scale,0,0,scale,(c.width-W*scale)/2,(c.height-H*scale)/2); x.clearRect(-20,-20,W+40,H+40);
+      if(ready(art.background)) x.drawImage(art.background,0,0,W,H);
+      else {rect(0,0,W,H,'#65c9eb');rect(0,135,W,89,'#54acd2');for(let i=0;i<18;i++){let bh=20+(i*17)%44;rect(i*28,135-bh,21,bh,'#3b85b5');rect(i*28+5,142-bh,4,5,'#ffe18a')}rect(0,224,W,46,'#eab860');rect(0,220,W,4,'#fff0b1');rect(238,130,4,94,'#fff0b1')}
+      // hoops
+      [[38,1],[442,-1]].forEach(([hx,dir])=>{let hoop=dir===1?art.hoopLeft:art.hoopRight;if(ready(hoop))x.drawImage(hoop,hx-56,32,112,112);else{rect(hx-dir*3,42,7,63,'#e9f4f2');rect(hx-dir*41,38,47,7,'#f7f1d0');rect(hx-dir*43,44,6,35,'#f7f1d0');x.strokeStyle='#f7f1d0';x.lineWidth=6;x.beginPath();x.arc(hx,101,19,0,Math.PI);x.stroke();rect(hx-20,101,40,6,'#f05b4f')}});
+      players.forEach((p,i)=>{let px=Math.round(p.x),py=Math.round(p.y);
+        if(p.aim>0){
+          // Large timing meter: red = low chance, yellow = fair, green = best.
+          const barX=px-22,barY=py-37,barW=64;
+          rect(barX-2,barY-2,barW+4,12,'#18243d');
+          rect(barX,barY,16,8,'#ec5960');rect(barX+16,barY,16,8,'#f4c34e');
+          rect(barX+32,barY,16,8,'#63c866');rect(barX+48,barY,16,8,'#ec5960');
+          rect(barX+barW*p.aim-2,barY-3,4,14,'#fff5d8');
+          x.fillStyle='#fff5d8';x.font='bold 6px monospace';x.fillText('TIMING',px+10,barY-5);
+        }
+        if(!drawPlayerFrame(p,i,px,py)){let sprite=i===0?art.blue:art.red;if(ready(sprite))x.drawImage(sprite,px-10,py-19,44,66)}
+        if(p.fake){x.fillStyle='#fff5d8';x.font='bold 8px monospace';x.fillText('FAKE!',px+10,py-22)}if(p.dunk){x.fillStyle='#fff5d8';x.font='bold 10px monospace';x.fillText('DUNK!',px+10,py-27)}if(p.steal){x.fillStyle=p.stealGood?'#b9ff8e':'#fff5d8';x.font='bold 8px monospace';x.fillText(p.stealGood?'STEAL!':'TRY!',px+10,py-22)}});
+      // ball pixel circle
+      let bx=Math.round(ball.x),by=Math.round(ball.y);if(!ball.hidden){x.save();x.translate(bx,by);x.rotate(ball.spin||0);if(ready(art.ball))x.drawImage(art.ball,-11,-11,22,22);else{x.fillStyle='#f47a34';x.beginPath();x.arc(0,0,10,0,Math.PI*2);x.fill();x.strokeStyle='#6d3723';x.lineWidth=2;x.beginPath();x.moveTo(-9,0);x.lineTo(9,0);x.moveTo(0,-9);x.lineTo(0,9);x.stroke()}x.restore()}
+      x.textAlign='center';x.fillStyle='#18243d';x.font='bold 16px monospace';x.fillText('藍隊 '+scores[0]+'   :   '+scores[1]+' 紅隊',240,24);x.font='bold 12px monospace';x.fillText('時間 '+Math.ceil(clock),240,43);x.font='bold 8px monospace';x.fillText('近框持球跳躍＝灌籃 · 空中按住跳躍瞄準',240,56);
+      if(transition){
+        const t=transition.time,alpha=t<.25?t/.25:t<.75?1:Math.max(0,1-(t-.75)/.25);
+        x.fillStyle=`rgba(8,14,28,${alpha})`;x.fillRect(0,0,W,H);
+        if(alpha>.65){x.fillStyle='#fff5d8';x.font='bold 24px monospace';x.fillText(transition.scorer===0?'藍隊得分！':'紅隊得分！',240,128)}
+      }
+      if(gameOver){rect(92,72,296,77,'#18243d');x.fillStyle='#fff5d8';x.font='bold 22px monospace';x.fillText(scores[0]===scores[1]?'平 手！':(scores[0]>scores[1]?'藍隊獲勝！':'紅隊獲勝！'),240,104);x.font='bold 12px monospace';x.fillText('點選「再玩一次」開始新比賽',240,130)}
+    }
+    function loop(t){let dt=Math.min(.035,(t-last)/1000||0);last=t;update(dt);draw();requestAnimationFrame(loop)} requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>
