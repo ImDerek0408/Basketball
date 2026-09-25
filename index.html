@@ -303,6 +303,7 @@
   }
 
   if(ready(art.floor)){
+  const floorY = 230;
   const floorWidth = W * 0.92;
   const floorHeight = H - 230;
   const floorX = (W - floorWidth) / 2;
@@ -310,6 +311,7 @@
   x.drawImage(
     art.floor,
     floorX,
+    floorY,
     230,
     floorWidth,
     floorHeight
