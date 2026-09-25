@@ -294,10 +294,19 @@
     }
     function rect(a,b,d,e,col){x.fillStyle=col;x.fillRect(a,b,d,e)}
     function draw(){
-      x.setTransform(scale,0,0,scale,(c.width-W*scale)/2,(c.height-H*scale)/2); x.clearRect(-20,-20,W+40,H+40);
-      if(ready(art.background)) x.drawImage(art.background,0,0,W,H);
-      else {rect(0,0,W,H,'#65c9eb');rect(0,135,W,89,'#54acd2');for(let i=0;i<18;i++){let bh=20+(i*17)%44;rect(i*28,135-bh,21,bh,'#3b85b5');rect(i*28+5,142-bh,4,5,'#ffe18a')}rect(0,224,W,46,'#eab860');rect(0,220,W,4,'#fff0b1');rect(238,130,4,94,'#fff0b1')}
-      // hoops
+  x.setTransform(scale,0,0,scale,(c.width-W*scale)/2,(c.height-H*scale)/2);
+  x.clearRect(-20,-20,W+40,H+40);
+
+  if(ready(art.background)) x.drawImage(art.background,0,0,W,H);
+  else {
+    // 預設背景
+  }
+
+  if(ready(art.floor)){
+  x.drawImage(art.floor, 0, 224, W, H - 224);
+}
+
+  // hoops
       [[38,1],[442,-1]].forEach(([hx,dir])=>{let hoop=dir===1?art.hoopLeft:art.hoopRight;if(ready(hoop))x.drawImage(hoop,hx-56,32,112,112);else{rect(hx-dir*3,42,7,63,'#e9f4f2');rect(hx-dir*41,38,47,7,'#f7f1d0');rect(hx-dir*43,44,6,35,'#f7f1d0');x.strokeStyle='#f7f1d0';x.lineWidth=6;x.beginPath();x.arc(hx,101,19,0,Math.PI);x.stroke();rect(hx-20,101,40,6,'#f05b4f')}});
       players.forEach((p,i)=>{let px=Math.round(p.x),py=Math.round(p.y);
         if(p.aim>0){
