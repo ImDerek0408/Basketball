@@ -303,18 +303,19 @@
   }
 
   if(ready(art.floor)){
-  const floorWidth = W * 0.92;       // 稍微縮小到 92%
-  const floorHeight = H - ground;    // 從人物腳底畫到畫面底部
+  const floorWidth = W * 0.92;
+  const floorHeight = H - 230;
   const floorX = (W - floorWidth) / 2;
 
   x.drawImage(
     art.floor,
     floorX,
-    ground,
+    230,
     floorWidth,
     floorHeight
   );
 }
+
 
   // hoops
       [[38,1],[442,-1]].forEach(([hx,dir])=>{let hoop=dir===1?art.hoopLeft:art.hoopRight;if(ready(hoop))x.drawImage(hoop,hx-56,32,112,112);else{rect(hx-dir*3,42,7,63,'#e9f4f2');rect(hx-dir*41,38,47,7,'#f7f1d0');rect(hx-dir*43,44,6,35,'#f7f1d0');x.strokeStyle='#f7f1d0';x.lineWidth=6;x.beginPath();x.arc(hx,101,19,0,Math.PI);x.stroke();rect(hx-20,101,40,6,'#f05b4f')}});
