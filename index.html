@@ -303,7 +303,17 @@
   }
 
   if(ready(art.floor)){
-  x.drawImage(art.floor, 0, 120, W, H - 120);
+  const floorWidth = W * 0.92;       // 稍微縮小到 92%
+  const floorHeight = H - ground;    // 從人物腳底畫到畫面底部
+  const floorX = (W - floorWidth) / 2;
+
+  x.drawImage(
+    art.floor,
+    floorX,
+    ground,
+    floorWidth,
+    floorHeight
+  );
 }
 
   // hoops
