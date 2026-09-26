@@ -12,7 +12,7 @@
     #controls { position:fixed; inset:auto 0 max(14px, env(safe-area-inset-bottom)); display:flex; justify-content:space-between; padding:0 18px; pointer-events:none; }
     .side { display:grid; grid-template-columns:repeat(3, 62px); gap:9px; pointer-events:auto; }
     .right { direction:rtl; }
-    button { border:4px solid #fff5d8; border-radius:13px; width:62px; height:58px; color:#fff; font-size:23px; font-weight:900; text-shadow:2px 2px #18243d; box-shadow:0 5px 0 #18243d; touch-action:none; }
+    button { border:4px solid #fff5d8; border-radius:13px; width:62px; height:58px; color:#fff; font-size:23px; font-weight:900; text-shadow:2px 2px #18243d; box-shadow:0 5px 0 #18243d; touch-action:manipulation; cursor:pointer; transition:none; }
     .blue button { background:#278fca; } .red button { background:#d7444a; }
     button:active, button.active { transform:translateY(4px); box-shadow:0 1px 0 #18243d; filter:brightness(.88); }
     .shoot { grid-column:span 3; width:100%; font-size:17px; letter-spacing:1px; }
@@ -51,7 +51,7 @@
     art.background=makeImage("./assets/background.svg");
     art.floor=makeImage("assets/floor.png");
     art.still=makeImage("assets/ball-new.png");
-    art.ball=makeImage("assets/stand.png");
+    art.ball=makeImage("assets/ball-new.png");
     art.hoopLeft=makeImage("./assets/hoopright.png");
     art.hoopRight=makeImage("./assets/hoopleft.png");
     
@@ -81,7 +81,7 @@
       for(const group of groups)if(group.length<Math.max(28,largest*.018))for(const id of group)px[id*4+3]=0;
       ctx.putImageData(data,0,0);
       let left=w,top=h,right=0,bottom=0;for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(px[(y*w+x)*4+3]>12){left=Math.min(left,x);top=Math.min(top,y);right=Math.max(right,x);bottom=Math.max(bottom,y)}
-      if(right<=left||bottom<=top)return raw;const pad=2,out=document.createElement('canvas');out.width=right-left+1+pad*2;out.height=bottom-top+1+pad*2;out.getContext('2d').drawImage(raw,left-pad[...]
+      if(right<=left||bottom<=top)return raw;const pad=2,out=document.createElement('canvas');out.width=right-left+1+pad*2;out.height=bottom-top+1+pad*2;out.getContext('2d').drawImage(raw,left-pad,top-pad,right-left+1+pad*2,bottom-top+1+pad*2,0,0,out.width,out.height);return out;
     }
     let playerSpriteCache = null;
     let redPlayerSpriteCache = null;
