@@ -28,13 +28,11 @@
       <button data-key="left">◀</button><button data-key="jump">▲</button><button data-key="right">▶</button>
       <button class="shoot" data-key="fake">拜 佛</button>
       <button class="shoot" data-key="steal">抄 球</button>
-      <button class="shoot" data-key="dribble">運 球</button>
     </div>
     <div class="side red right" data-player="1">
       <button data-key="left">◀</button><button data-key="jump">▲</button><button data-key="right">▶</button>
       <button class="shoot" data-key="fake">拜 佛</button>
       <button class="shoot" data-key="steal">抄 球</button>
-      <button class="shoot" data-key="dribble">運 球</button>
     </div>
   </div>
   <script>
@@ -49,9 +47,9 @@
       return img;
     }
     art.background=makeImage("./assets/background.svg");
-    art.floor=makeImage("assets/floor.png");
-    art.still=makeImage("assets/stand.png");
-    art.ball=makeImage("assets/ball-new.png");
+    art.floor=makeImage("./assets/floor.png");
+    art.still=makeImage("./assets/stand.png");
+    art.ball=makeImage("./assets/ball-new.png");
     art.hoopLeft=makeImage("./assets/hoopright.png");
     art.hoopRight=makeImage("./assets/hoopleft.png");
     
@@ -85,6 +83,8 @@
     }
     let playerSpriteCache = null;
     let redPlayerSpriteCache = null;
+    let dribbleSpriteCaches = [{}, {}];  // 快取運球動畫幀
+    
     function makePlayerSprite(team){
       if(!ready(art.still)) return null;
       if(team===0 && playerSpriteCache) return playerSpriteCache;
@@ -138,6 +138,60 @@
       }
       return out;
     }
+    
+    function makeDribbleSprite(frameIndex, team){
+      if(!ready(art.dribbleFrames[frameIndex])) return null;
+      if(dribbleSpriteCaches[team][frameIndex]) return dribbleSpriteCaches[team][frameIndex];
+      
+      const source=art.dribbleFrames[frameIndex];
+      const sw=source.naturalWidth, sh=source.naturalHeight;
+      const tmp=document.createElement('canvas');
+      tmp.width=sw; tmp.height=sh;
+      const tc=tmp.getContext('2d');
+      tc.drawImage(source,0,0);
+      const data=tc.getImageData(0,0,sw,sh).data;
+      let left=sw, top=sh, right=-1, bottom=-1;
+      for(let yy=0;yy<sh;yy++){
+        for(let xx=0;xx<sw;xx++){
+          if(data[(yy*sw+xx)*4+3]>12){
+            if(xx<left)left=xx;
+            if(xx>right)right=xx;
+            if(yy<top)top=yy;
+            if(yy>bottom)bottom=yy;
+          }
+        }
+      }
+      if(right<left || bottom<top) return null;
+      const pad=4;
+      left=Math.max(0,left-pad);
+      top=Math.max(0,top-pad);
+      right=Math.min(sw-1,right+pad);
+      bottom=Math.min(sh-1,bottom+pad);
+      const cw=right-left+1, ch=bottom-top+1;
+      const out=document.createElement('canvas');
+      out.width=cw; out.height=ch;
+      const oc=out.getContext('2d');
+      oc.imageSmoothingEnabled=false;
+      oc.drawImage(source,left,top,cw,ch,0,0,cw,ch);
+      if(team===1){
+        const img=oc.getImageData(0,0,cw,ch);
+        const pxs=img.data;
+        for(let n=0;n<pxs.length;n+=4){
+          if(pxs[n+3]===0) continue;
+          const r=pxs[n], g=pxs[n+1], b=pxs[n+2];
+          if(b>r*1.18 && b>g*1.05 && b>80){
+            const light=Math.max(r,g,b);
+            pxs[n]=Math.min(255,light);
+            pxs[n+1]=Math.round(g*0.30);
+            pxs[n+2]=Math.round(b*0.42);
+          }
+        }
+        oc.putImageData(img,0,0);
+      }
+      dribbleSpriteCaches[team][frameIndex]=out;
+      return out;
+    }
+    
     function drawPlayerFrame(p,i,px,py){
       const sprite=makePlayerSprite(i);
       if(!sprite)return false;
@@ -152,19 +206,19 @@
       return true;
     }
     
-    // 繪製運球動畫幀
     function drawDribbleFrame(p,i,px,py){
-      if(p.dribbleFrame<0 || p.dribbleFrame>=art.dribbleFrames.length) return false;
-      const frame = art.dribbleFrames[Math.floor(p.dribbleFrame)];
-      if(!ready(frame)) return false;
+      if(p.dribbleFrame<0 || p.dribbleFrame>=7) return false;
+      const frameIndex=Math.floor(p.dribbleFrame);
+      const sprite=makeDribbleSprite(frameIndex, i);
+      if(!sprite)return false;
       
       const displayH=78;
-      const displayW=displayH*(frame.width/frame.height);
+      const displayW=displayH*(sprite.width/sprite.height);
       x.save();
       x.translate(px+10,py+26);
       if(p.face<0)x.scale(-1,1);
       x.imageSmoothingEnabled=false;
-      x.drawImage(frame,-displayW/2,-displayH,displayW,displayH);
+      x.drawImage(sprite,-displayW/2,-displayH,displayW,displayH);
       x.restore();
       return true;
     }
@@ -173,7 +227,7 @@
     let scale=1, gameOver=false, last=0, clock=60, scores=[0,0], players, ball, transition=null;
     function reset(){
       gameOver=false; clock=60; scores=[0,0]; transition=null; restart.style.display='none';
-      players=[{x:142,y:ground-28,vx:0,vy:0,face:1,col:'#278fca',num:'1',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribble:0,dribbleFrame:-1},{x:338,y:ground-28,vx:0,vy:0,face:-1,col:'#d7444a',num:'2',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribble:0,dribbleFrame:-1}];
+      players=[{x:142,y:ground-28,vx:0,vy:0,face:1,col:'#278fca',num:'1',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribbleTime:0},{x:338,y:ground-28,vx:0,vy:0,face:-1,col:'#d7444a',num:'2',cool:0,aim:0,aimDir:1,jumpLock:false,fake:0,dunk:0,steal:0,stealCool:0,stealGood:0,shootAnim:0,dribbleTime:0}];
       ball={x:240,y:205,vx:0,vy:0,held:-1,wait:0,rimHit:false,canScore:false,spin:0,angular:0,rimRoll:null,rimCooldown:0};
     }
     function resize(){ c.width=innerWidth; c.height=innerHeight; scale=Math.min(c.width/W,c.height/H); }
@@ -235,7 +289,7 @@
         const wasAir=p.y<ground-29;
         p.vy+=620*dt;p.x=clamp(p.x+p.vx*dt,18,W-36);p.y+=p.vy*dt;
         const landed=wasAir&&p.y>ground-28;
-        if(p.y>ground-28){p.y=ground-28;p.vy=0} p.cool-=dt;p.shootAnim=Math.max(0,p.shootAnim-dt);p.fake=Math.max(0,p.fake-dt);p.steal=Math.max(0,p.steal-dt);p.stealCool-=dt;p.stealGood=Math.max(0,p.stealGood-dt);p.dribble=Math.max(0,p.dribble-dt);
+        if(p.y>ground-28){p.y=ground-28;p.vy=0} p.cool-=dt;p.shootAnim=Math.max(0,p.shootAnim-dt);p.fake=Math.max(0,p.fake-dt);p.steal=Math.max(0,p.steal-dt);p.stealCool-=dt;p.stealGood=Math.max(0,p.stealGood-dt);
         const d=Math.hypot(p.x+9-ball.x,p.y+12-ball.y);
         if(ball.held<0&&d<25&&ball.wait<=0) ball.held=i;
         if(k.jump && p.y<ground-28 && ball.held===i && p.cool<=0){
@@ -254,19 +308,15 @@
             ball.held=i;ball.wait=.14;p.stealGood=.32;
           }
         }
-        // 運球邏輯
-        if(k.dribble && ball.held===i && p.cool<=0 && p.y>=ground-28){
-          if(p.dribble<=0){
-            p.dribble=.84;  // 運球動畫持續時間
-            p.dribbleFrame=0;
-            p.cool=.20;
-            k.dribble=false;
+        
+        // 持球時自動運球動畫（循環）
+        if(ball.held===i && p.aim<=0 && p.fake<=0 && p.y>=ground-28){
+          p.dribbleTime+=dt;
+          if(p.dribbleTime>=1.2){  // 運球週期 1.2 秒
+            p.dribbleTime=0;
           }
-        }
-        if(p.dribble>0){
-          p.dribbleFrame=(0.84-p.dribble)/0.84*7;  // 7幀動畫
         } else {
-          p.dribbleFrame=-1;
+          p.dribbleTime=0;
         }
       });
       if(ball.held>=0){
@@ -341,15 +391,21 @@
           rect(barX+barW*p.aim-2,barY-3,4,14,'#fff5d8');
           x.fillStyle='#fff5d8';x.font='bold 6px monospace';x.fillText('TIMING',px+10,barY-5);
         }
-        // 優先繪製運球動畫，否則使用默認動畫
-        if(p.dribble>0 && !drawDribbleFrame(p,i,px,py)){
-          if(!drawPlayerFrame(p,i,px,py)){let sprite=i===0?art.blue:art.red;if(ready(sprite))x.drawImage(sprite,px-10,py-19,44,66)}
-        } else if(p.dribble<=0){
-          if(!drawPlayerFrame(p,i,px,py)){let sprite=i===0?art.blue:art.red;if(ready(sprite))x.drawImage(sprite,px-10,py-19,44,66)}
+        
+        // 當持球且不在做其他動作時，播放運球動畫
+        let dribbleFrame=-1;
+        if(ball.held===i && p.aim<=0 && p.fake<=0 && p.y>=ground-28){
+          dribbleFrame=p.dribbleTime/1.2*7;  // 轉換為幀數（0-7）
         }
+        
+        if(dribbleFrame>=0 && !drawDribbleFrame({dribbleFrame},i,px,py)){
+          drawPlayerFrame(p,i,px,py);
+        } else {
+          drawPlayerFrame(p,i,px,py);
+        }
+        
         if(p.fake){x.fillStyle='#fff5d8';x.font='bold 8px monospace';x.fillText('FAKE!',px+10,py-22)}
         if(p.dunk){x.fillStyle='#fff5d8';x.font='bold 10px monospace';x.fillText('DUNK!',px+10,py-27)}
-        if(p.dribble>0){x.fillStyle='#fff5d8';x.font='bold 8px monospace';x.fillText('DRIBBLE!',px+10,py-22)}
       });
 
       // 地板（在球員上面）
