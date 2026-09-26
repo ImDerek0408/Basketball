@@ -302,19 +302,10 @@
     // 預設背景
   }
 
-  if(ready(art.floor)){
-  const floorY = 230;
-  const floorWidth = W * 0.92;
-  const floorHeight = H - 230;
-  const floorX = (W - floorWidth) / 2;
+  // ball pixel circle
+    let bx=Math.round(ball.x),by=Math.round(ball.y);if(!ball.hidden){x.save();x.translate(bx,by);x.rotate(ball.spin||0);if(ready(art.ball))x.drawImage(art.ball,-12,-12,24,24);else{x.fillStyle='#f47a34';x.beginPath();x.arc(0,0,10,0,Math.PI*2);x.fill();x.strokeStyle='#6d3723';x.lineWidth=2;x.beginPath();x.moveTo(-9,0);x.lineTo(9,0);x.moveTo(0,-9);x.lineTo(0,9);x.stroke()}x.restore()}
 
-  x.drawImage(art.floor,floorX,floorY,floorWidth,floorHeight);
-  }
-
-
-
-  // hoops
-      [[28,1],[452,-1]].forEach(([hx,dir])=>{let hoop=dir===1?art.hoopLeft:art.hoopRight;if(ready(hoop))x.drawImage(hoop,hx-56,32,112,112);else{rect(hx-dir*3,42,7,63,'#e9f4f2');rect(hx-dir*41,38,47,7,'#f7f1d0');rect(hx-dir*43,44,6,35,'#f7f1d0');x.strokeStyle='#f7f1d0';x.lineWidth=6;x.beginPath();x.arc(hx,101,19,0,Math.PI);x.stroke();rect(hx-20,101,40,6,'#f05b4f')}});
+      // players
       players.forEach((p,i)=>{let px=Math.round(p.x),py=Math.round(p.y);
         if(p.aim>0){
           // Large timing meter: red = low chance, yellow = fair, green = best.
@@ -325,10 +316,22 @@
           rect(barX+barW*p.aim-2,barY-3,4,14,'#fff5d8');
           x.fillStyle='#fff5d8';x.font='bold 6px monospace';x.fillText('TIMING',px+10,barY-5);
         }
-        if(!drawPlayerFrame(p,i,px,py)){let sprite=i===0?art.blue:art.red;if(ready(sprite))x.drawImage(sprite,px-10,py-19,44,66)}
+        // floor
+        if(!drawPlayerFrame(p,i,px,py)){let sprite=i===0?art.blue:art.red;if(ready(sprite))x.drawImage(sprite,px-10,py-19,44,66); 
         if(p.fake){x.fillStyle='#fff5d8';x.font='bold 8px monospace';x.fillText('FAKE!',px+10,py-22)}if(p.dunk){x.fillStyle='#fff5d8';x.font='bold 10px monospace';x.fillText('DUNK!',px+10,py-27)}if(p.steal){x.fillStyle=p.stealGood?'#b9ff8e':'#fff5d8';x.font='bold 8px monospace';x.fillText(p.stealGood?'STEAL!':'TRY!',px+10,py-22)}});
-      // ball pixel circle
-      let bx=Math.round(ball.x),by=Math.round(ball.y);if(!ball.hidden){x.save();x.translate(bx,by);x.rotate(ball.spin||0);if(ready(art.ball))x.drawImage(art.ball,-12,-12,24,24);else{x.fillStyle='#f47a34';x.beginPath();x.arc(0,0,10,0,Math.PI*2);x.fill();x.strokeStyle='#6d3723';x.lineWidth=2;x.beginPath();x.moveTo(-9,0);x.lineTo(9,0);x.moveTo(0,-9);x.lineTo(0,9);x.stroke()}x.restore()}
+        if(ready(art.floor)){
+        const floorY = 230;
+        const floorWidth = W * 0.92;
+        const floorHeight = H - 230;
+        const floorX = (W - floorWidth) / 2;
+
+        x.drawImage(art.floor,floorX,floorY,floorWidth,floorHeight);
+        }
+
+
+      // hoops
+      [[28,1],[452,-1]].forEach(([hx,dir])=>{let hoop=dir===1?art.hoopLeft:art.hoopRight;if(ready(hoop))x.drawImage(hoop,hx-56,32,112,112);else{rect(hx-dir*3,42,7,63,'#e9f4f2');rect(hx-dir*41,38,47,7,'#f7f1d0');rect(hx-dir*43,44,6,35,'#f7f1d0');x.strokeStyle='#f7f1d0';x.lineWidth=6;x.beginPath();x.arc(hx,101,19,0,Math.PI);x.stroke();rect(hx-20,101,40,6,'#f05b4f')}});
+
       // ===== Stylish scoreboard =====
       // Dark navy panels, cream pixel borders, team-color accents,
       // large scores, and a compact center timer.
